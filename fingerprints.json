@@ -1,0 +1,54 @@
+{
+  "HubSpot": {
+    "script": ["//js\\.hs-scripts\\.com/", "//js\\.hsforms\\.net/"],
+    "dns": { "TXT": "hubspot-developer-verification" }
+  },
+  "Stripe": {
+    "script": "js\\.stripe\\.com/v3",
+    "headers": { "X-Stripe-.*": "" }
+  },
+  "Google Analytics 4": {
+    "script": ["google-analytics\\.com/g/collect", "gtag\\("]
+  },
+  "Intercom": {
+    "script": "widget\\.intercom\\.io/",
+    "cookies": { "^intercom-": "" }
+  },
+  "Cloudflare": {
+    "headers": { "cf-ray": "", "cf-cache-status": "" }
+  },
+  "WordPress": {
+    "html": ["/wp-content/", "/wp-includes/"]
+  },
+  "Shopify": {
+    "html": "cdn\\.shopify\\.com",
+    "headers": { "X-ShopId": "" }
+  },
+  "SendGrid": {
+    "dns": { "TXT": "sendgrid\\.net" }
+  },
+  "Salesforce": {
+    "dns": { "CNAME": "\\.salesforce\\.com" }
+  },
+  "Google Workspace": {
+    "dns": { "MX": "google\\.com" }
+  },
+  "Microsoft 365": {
+    "dns": { "MX": "protection\\.outlook\\.com" }
+  },
+  "Zendesk": {
+    "script": "static\\.zdassets\\.com"
+  },
+  "Drift": {
+    "script": "js\\.driftt\\.com"
+  },
+  "Segment": {
+    "script": "cdn\\.segment\\.com/analytics\\.js"
+  },
+  "Sentry": {
+    "script": "browser\\.sentry-cdn\\.com"
+  },
+  "Hotjar": {
+    "script": "static\\.hotjar\\.com"
+  }
+}

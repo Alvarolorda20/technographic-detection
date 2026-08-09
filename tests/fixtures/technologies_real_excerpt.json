@@ -1,0 +1,236 @@
+{
+  "jQuery": {
+    "cats": [
+      59
+    ],
+    "cpe": "cpe:2.3:a:jquery:jquery:*:*:*:*:*:*:*:*",
+    "description": "jQuery is a JavaScript library which is a free, open-source software designed to simplify HTML DOM tree traversal and manipulation, as well as event handling, CSS animation, and Ajax.",
+    "icon": "jQuery.svg",
+    "js": {
+      "$.fn.jquery": "([\\d.]+)\\;version:\\1",
+      "jQuery.fn.jquery": "([\\d.]+)\\;version:\\1",
+      "jQuery.prototype.jquery": "([\\d.]+)\\;version:\\1"
+    },
+    "scriptSrc": [
+      "jquery",
+      "/jquery(?:-(\\d+\\.\\d+\\.\\d+))[/.-]\\;version:\\1",
+      "/(\\d+\\.\\d+\\.\\d+)/jquery(?!\\.popupoverlay\\.js|(?:\\.[\\w-]*)*fancybox)[/.-][^u]\\;version:\\1"
+    ],
+    "website": "https://jquery.com"
+  },
+  "Google Analytics": {
+    "cats": [
+      10
+    ],
+    "cookies": {
+      "__utma": "",
+      "_ga": "",
+      "_ga_*": "\\;version:GA4",
+      "_gat": "\\;version:UA"
+    },
+    "description": "Google Analytics is a free web analytics service that tracks and reports website traffic.",
+    "dom": [
+      "amp-analytics[type*=googleanalytics]"
+    ],
+    "icon": "Google Analytics.svg",
+    "js": {
+      "GoogleAnalyticsObject": "",
+      "gaGlobal": ""
+    },
+    "scriptSrc": [
+      "google-analytics\\.com/(?:ga|urchin|analytics)\\.js",
+      "googletagmanager\\.com/gtag/js"
+    ],
+    "scripts": [
+      "gtag\\([^)]+'(UA-)\\;version:\\1?UA:",
+      "gtag\\([^)]+'(G-)\\;version:\\1?GA4:"
+    ],
+    "website": "https://google.com/analytics"
+  },
+  "WordPress": {
+    "cats": [
+      1,
+      11
+    ],
+    "cpe": "cpe:2.3:a:wordpress:wordpress:*:*:*:*:*:*:*:*",
+    "description": "WordPress is a free and open-source content management system written in PHP and paired with a MySQL or MariaDB database. Features include a plugin architecture and a template system.",
+    "dom": [
+      "div[class*='wp-block-group'] > div[class*='wp-block-']",
+      "link[rel=stylesheet][href*='/wp-content/']",
+      "link[rel=stylesheet][href*='/wp-includes/']",
+      "link[href*='.wp.com']"
+    ],
+    "headers": {
+      "X-Pingback": "/xmlrpc\\.php$",
+      "link": "rel=\"https://api\\.w\\.org/\""
+    },
+    "html": [
+      "<link rel=[\"']stylesheet[\"'] [^>]+/wp-(?:content|includes)/",
+      "<link[^>]+s\\d+\\.wp\\.com"
+    ],
+    "icon": "WordPress.svg",
+    "implies": [
+      "PHP",
+      "MySQL"
+    ],
+    "js": {
+      "wp.ajax": "",
+      "wp.receiveEmbedMessage": "",
+      "wp_username": "",
+      "wpb_prepare_tab_content": ""
+    },
+    "meta": {
+      "generator": "^WordPress(?: ([\\d.]+))?\\;version:\\1",
+      "shareaholic:wp_version": ""
+    },
+    "oss": true,
+    "pricing": [
+      "low",
+      "recurring",
+      "freemium"
+    ],
+    "saas": true,
+    "scriptSrc": [
+      "/wp-(?:content|includes)/",
+      "wp-embed\\.min\\.js",
+      "wp-static\\.assets\\.sh/"
+    ],
+    "scripts": [
+      "/wp-content"
+    ],
+    "website": "https://wordpress.org"
+  },
+  "Cloudflare": {
+    "cats": [
+      31
+    ],
+    "cookies": {
+      "__cfduid": ""
+    },
+    "cpe": "cpe:2.3:a:cloudflare:cloudflare:*:*:*:*:*:*:*:*",
+    "description": "Cloudflare is a web-infrastructure and website-security company, providing content-delivery-network services, DDoS mitigation, Internet security, and distributed domain-name-server services.",
+    "dns": {
+      "NS": [
+        "\\.cloudflare\\.com"
+      ],
+      "SOA": [
+        "\\.cloudflare\\.com"
+      ]
+    },
+    "dom": [
+      "img[src*='//cdn.cloudflare']"
+    ],
+    "headers": {
+      "Server": "^cloudflare$",
+      "cf-cache-status": "",
+      "cf-ray": ""
+    },
+    "icon": "CloudFlare.svg",
+    "js": {
+      "CloudFlare": ""
+    },
+    "meta": {
+      "image": "//cdn\\.cloudflare"
+    },
+    "website": "https://www.cloudflare.com"
+  },
+  "Carrd": {
+    "cats": [
+      51
+    ],
+    "description": "Carrd is a platform for building simple, responsive, one-page sites.",
+    "dom": [
+      "link[href*='.carrd.co'][rel='canonical']"
+    ],
+    "icon": "Carrd.svg",
+    "pricing": [
+      "freemium",
+      "low",
+      "recurring"
+    ],
+    "requires": [
+      "Apache HTTP Server"
+    ],
+    "saas": true,
+    "scripts": [
+      "\\(\\!section\\s\\|\\|\\ssection\\.tagName\\s\\!\\=\\s\\'SECTION\\'\\)\\;confidence:90"
+    ],
+    "website": "https://carrd.co"
+  },
+  "Chart.js": {
+    "cats": [
+      25
+    ],
+    "description": "Chart.js is an open-source JavaScript library that allows you to draw different types of charts by using the HTML5 canvas element.",
+    "icon": "Chart.js.svg",
+    "js": {
+      "Chart": "\\;confidence:50",
+      "Chart.defaults.doughnut": "",
+      "chart.ctx.bezierCurveTo": ""
+    },
+    "scriptSrc": [
+      "/Chart(?:\\.bundle)?(?:\\.min)?\\.js\\;confidence:75",
+      "chartjs\\.org/dist/([\\d.]+(?:-[^/]+)?|master|latest)/Chart.*\\.js\\;version:\\1",
+      "cdnjs\\.cloudflare\\.com/ajax/libs/Chart\\.js/([\\d.]+(?:-[^/]+)?)/Chart.*\\.js\\;version:\\1",
+      "cdn\\.jsdelivr\\.net/(?:npm|gh/chartjs)/chart\\.js@([\\d.]+(?:-[^/]+)?|latest)/dist/Chart.*\\.js\\;version:\\1"
+    ],
+    "website": "https://www.chartjs.org"
+  },
+  "Shopify": {
+    "cats": [
+      6
+    ],
+    "cookies": {
+      "_shopify_essential_": "",
+      "_shopify_s": "",
+      "_shopify_sa_p": "",
+      "_shopify_sa_t": "",
+      "_shopify_y": ""
+    },
+    "description": "Shopify is a subscription-based software that allows anyone to set up an online store and sell their products. Shopify store owners can also sell in physical locations using Shopify POS, a point-of-sale app and accompanying hardware.",
+    "dom": {
+      "link[href*='shopify.com']": {
+        "attributes": {
+          "href": "(?:cdn\\.|\\.my)shopify\\.com\\;confidence:50"
+        }
+      }
+    },
+    "headers": {
+      "x-shopid": "\\;confidence:50",
+      "x-shopify-stage": ""
+    },
+    "icon": "Shopify.svg",
+    "js": {
+      "SHOPIFY_API_BASE_URL": "",
+      "Shopify": "\\;confidence:25",
+      "ShopifyAPI": "",
+      "ShopifyAnalytics": "",
+      "ShopifyCustomer": "",
+      "goaffproShopifyStVariableFix": "",
+      "shopifyAccessUrl": ""
+    },
+    "meta": {
+      "shopify-checkout-api-token": "",
+      "shopify-digital-wallet": ""
+    },
+    "pricing": [
+      "low",
+      "recurring"
+    ],
+    "saas": true,
+    "scriptSrc": [
+      "sdks\\.shopifycdn\\.com",
+      "cdn\\.shopify\\.com"
+    ],
+    "scripts": [
+      "shopifyTag"
+    ],
+    "url": [
+      "^https?//.+\\.myshopify\\.com"
+    ],
+    "website": "https://shopify.com",
+    "xhr": [
+      "\\.myshopify\\.com"
+    ]
+  }
+}

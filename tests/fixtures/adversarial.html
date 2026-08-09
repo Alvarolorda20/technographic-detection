@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Payments blog — how Stripe embeds work</title>
+  <meta name="description" content="A post that mentions js.stripe.com/v3 in text only.">
+</head>
+<body>
+  <h1>How the Stripe embed works</h1>
+  <p>Most sites load the library from js.stripe.com/v3 and call gtag( for analytics —
+     but this page merely writes about it, it does not use it.</p>
+  <pre><code>&lt;script src="https://js.stripe.com/v3"&gt;&lt;/script&gt;
+gtag('config', 'G-XYZ');
+widget.intercom.io/widget</code></pre>
+  <script id="__NEXT_DATA__" type="application/json">
+    {"props": {"pageProps": {"doc": "Add js.stripe.com/v3 to your page, include static.hotjar.com, then call gtag('js', new Date())"}}}
+  </script>
+  <script type="application/ld+json">
+    {"@context": "https://schema.org", "articleBody": "cdn.segment.com/analytics.js and js.driftt.com are popular"}
+  </script>
+</body>
+</html>
