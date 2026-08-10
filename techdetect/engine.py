@@ -191,12 +191,27 @@ def _match_named_pairs(
     return None
 
 
-def _match_texts(rule: Rule, texts: list[str], label: str = "") -> MatchEvidence | None:
+# Escaped opening script tags right before a match mean the surrounding text is
+# HTML serialized as data (a docs code sample, a JSON payload) — not a script
+# reference. Raw "<script" is NOT guarded: document.write loaders are real usage.
+_ESCAPED_SCRIPT_TAG_MARKERS = ("\\u003cscript", "&lt;script", "\\x3cscript", "%3cscript")
+_GUARD_WINDOW = 64
+
+
+def _inside_serialized_html(text: str, match_start: int) -> bool:
+    window = text[max(0, match_start - _GUARD_WINDOW) : match_start].lower()
+    return any(marker in window for marker in _ESCAPED_SCRIPT_TAG_MARKERS)
+
+
+def _match_texts(
+    rule: Rule, texts: list[str], label: str = "", guard_serialized_html: bool = False
+) -> MatchEvidence | None:
     for text in texts:
         if rule.value_regex is None:
             return _evidence(rule, f"{label}{_snippet(text)}")
-        found = rule.value_regex.search(text)
-        if found:
+        for found in rule.value_regex.finditer(text):
+            if guard_serialized_html and _inside_serialized_html(text, found.start()):
+                continue
             return _evidence(rule, f"{label}{_snippet(text, found)}")
     return None
 
@@ -209,10 +224,12 @@ def _apply_rule(rule: Rule, signals: SignalSet) -> MatchEvidence | None:
     if rule.channel == "scriptSrc":
         return _match_texts(rule, signals.script_srcs)
     if rule.channel == "scripts":
-        return _match_texts(rule, signals.inline_scripts, label="inline: ")
+        return _match_texts(
+            rule, signals.inline_scripts, label="inline: ", guard_serialized_html=True
+        )
     if rule.channel == "script":
         return _match_texts(rule, signals.script_srcs) or _match_texts(
-            rule, signals.inline_scripts, label="inline: "
+            rule, signals.inline_scripts, label="inline: ", guard_serialized_html=True
         )
     if rule.channel == "html":
         return _match_texts(rule, [signals.html] if signals.html else [])

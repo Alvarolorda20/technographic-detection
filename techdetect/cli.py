@@ -82,6 +82,9 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     level = logging.DEBUG if args.verbose else logging.ERROR if args.quiet else logging.INFO
     logging.basicConfig(stream=sys.stderr, level=level, format="%(levelname)s %(message)s")
+    if not args.verbose:  # per-request noise only at -v
+        logging.getLogger("httpx").setLevel(logging.WARNING)
+        logging.getLogger("httpcore").setLevel(logging.WARNING)
 
     fingerprints_path = args.fingerprints or DEFAULT_FINGERPRINTS_PATH
     try:

@@ -146,6 +146,35 @@ def test_evidence_is_sanitized_and_truncated(tmp_path):
     assert len(record.matched_signal) < 200  # never the whole document
 
 
+def test_inline_match_inside_escaped_html_is_not_usage(tmp_path):
+    """A docs code sample serialized into an executable script (e.g. a Next.js
+    RSC payload with an escaped <script> tag) is a mention, not usage."""
+    fps = load_from(tmp_path, {"Sentry": {"script": "browser\\.sentry-cdn\\.com"}})
+    docs_blob = (
+        'const install = [{"md": "```html\\n\\u003cscript src=\\"'
+        'https://browser.sentry-cdn.com/7/bundle.min.js\\">\\u003c/script>\\n```"}];'
+    )
+    assert fps.match(SignalSet(inline_scripts=[docs_blob]))[0] == []
+
+    escaped_entity = 'render("&lt;script src=https://browser.sentry-cdn.com/7/b.js&gt;")'
+    assert fps.match(SignalSet(inline_scripts=[escaped_entity]))[0] == []
+
+
+def test_inline_dynamic_loader_still_counts_as_usage(tmp_path):
+    fps = load_from(tmp_path, {"Sentry": {"script": "browser\\.sentry-cdn\\.com"}})
+    loader = "loadScript('https://browser.sentry-cdn.com/7/bundle.min.js');"
+    assert fps.match(SignalSet(inline_scripts=[loader]))[0] == ["Sentry"]
+    # document.write with a RAW tag is a classic genuine loader pattern.
+    writer = "document.write('<script src=\"https://browser.sentry-cdn.com/7/b.js\">');"
+    assert fps.match(SignalSet(inline_scripts=[writer]))[0] == ["Sentry"]
+    # A later genuine reference is found even when an earlier one is escaped data.
+    both = (
+        'help("\\u003cscript src=\\"https://browser.sentry-cdn.com/x\\"");'
+        " loadScript('https://browser.sentry-cdn.com/7/bundle.min.js');"
+    )
+    assert fps.match(SignalSet(inline_scripts=[both]))[0] == ["Sentry"]
+
+
 def test_real_wappalyzer_excerpt_loads_and_reports_skips():
     fps = load_fingerprints(REAL_EXCERPT)  # lenient, like any external DB
     assert fps.pattern_count > 20

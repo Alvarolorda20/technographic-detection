@@ -65,10 +65,13 @@ def test_malformed_html_never_raises():
         extract_page_signals(garbage)  # must not raise
 
 
-def test_adversarial_page_yields_no_script_signals():
+def test_adversarial_page_yields_no_script_src_signals():
     page = extract_page_signals(read_fixture("adversarial.html"))
     assert page.script_srcs == []
-    assert page.inline_scripts == []
+    # Only the RSC-style executable payload survives extraction; the JSON and
+    # ld+json data blobs are excluded. Matching-time guards handle the rest.
+    assert len(page.inline_scripts) == 1
+    assert "__docs_f" in page.inline_scripts[0]
 
 
 def test_adversarial_page_detects_nothing_with_bundled_fingerprints():
