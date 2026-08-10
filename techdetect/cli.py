@@ -1,7 +1,7 @@
 """Command-line interface.
 
 Exit codes: 0 = run completed (per-domain failures are expected operation,
-not process failure), 1 = fatal setup error, 2 = usage error (argparse).
+not process failure), 1 = fatal setup or output error, 2 = usage error (argparse).
 All logs go to stderr; only JSON is ever written to stdout.
 """
 
@@ -89,6 +89,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="also write per-domain match evidence (sanitized) to this JSON file",
     )
     parser.add_argument(
+        "--enable-js-channel",
+        action="store_true",
+        help="also match Wappalyzer 'js' (window.* globals) by searching inline scripts for the "
+        "global's name — a static approximation with a higher false-positive rate, off by default",
+    )
+    parser.add_argument(
         "--min-confidence",
         type=confidence_int,
         default=DEFAULT_CONFIDENCE,
@@ -120,6 +126,18 @@ def _read_domain_lines(source: str) -> list[str]:
     return Path(source).read_text(encoding="utf-8").splitlines()
 
 
+def _write_json(path: str, payload: object, label: str) -> bool:
+    """Write ``payload`` as JSON to ``path``; log and return False on any OS error."""
+    try:
+        Path(path).write_text(
+            json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+        )
+    except OSError as exc:
+        logger.error("cannot write %s to %s: %s", label, path, exc)
+        return False
+    return True
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     level = logging.DEBUG if args.verbose else logging.ERROR if args.quiet else logging.INFO
@@ -130,12 +148,18 @@ def main(argv: list[str] | None = None) -> int:
 
     fingerprints_path = args.fingerprints or DEFAULT_FINGERPRINTS_PATH
     try:
-        fingerprints = load_fingerprints(fingerprints_path, strict=args.fingerprints is None)
+        fingerprints = load_fingerprints(
+            fingerprints_path,
+            strict=args.fingerprints is None,
+            enable_js=args.enable_js_channel,
+        )
     except FingerprintError as exc:
         logger.error("%s", exc)
         return 1
     if fingerprints.skipped:
         logger.warning("%s", fingerprints.skipped_summary())
+        if fingerprints.skipped.get("js") and not args.enable_js_channel:
+            logger.warning("js patterns are skipped by default; --enable-js-channel matches them")
     logger.info(
         "loaded %d patterns for %d technologies from %s",
         fingerprints.pattern_count,
@@ -165,32 +189,39 @@ def main(argv: list[str] | None = None) -> int:
     elapsed = time.perf_counter() - started
 
     results = {report.domain: report.technologies for report in reports}
-    rendered = json.dumps(results, indent=2, ensure_ascii=False) + "\n"
     if args.output:
-        Path(args.output).write_text(rendered, encoding="utf-8")
+        if not _write_json(args.output, results, "results"):
+            return 1
     else:
-        sys.stdout.write(rendered)
+        sys.stdout.write(json.dumps(results, indent=2, ensure_ascii=False) + "\n")
 
     if args.evidence:
         evidence = {
             report.domain: [dataclasses.asdict(record) for record in report.evidence]
             for report in reports
         }
-        Path(args.evidence).write_text(
-            json.dumps(evidence, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
-        )
+        if not _write_json(args.evidence, evidence, "evidence"):
+            return 1
 
     ok = sum(1 for r in reports if r.status and r.status < 400 and not r.blocked)
     blocked = sum(1 for r in reports if r.blocked)
     failed = sum(1 for r in reports if not r.status)
+    partial = sum(1 for r in reports if not r.complete)
     logger.info(
-        "Scanned %d domain(s) in %.1fs (%d ok, %d blocked, %d no response)",
+        "Scanned %d domain(s) in %.1fs (%d ok, %d blocked, %d no response, %d partial)",
         len(reports),
         elapsed,
         ok,
         blocked,
         failed,
+        partial,
     )
+    if partial:
+        logger.warning(
+            "%d domain(s) were measured incompletely (see warnings above): for those, an absent "
+            "technology means unconfirmed, not ruled out",
+            partial,
+        )
     return 0
 
 

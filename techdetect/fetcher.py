@@ -17,7 +17,10 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-BODY_CAP_BYTES = 1_500_000
+# Bounds memory and matching work on unexpectedly large responses. Sized with
+# headroom over real homepages: the largest of the assignment's test domains
+# serves ~1.5 MB, and a cap it can reach would silently drop page signals.
+BODY_CAP_BYTES = 4_000_000
 DEFAULT_TIMEOUT = 8.0
 CONNECT_TIMEOUT = 5.0
 # Challenge markers are only searched in this prefix of a 2xx body: real
@@ -61,6 +64,7 @@ class FetchResult:
     blocked: bool = False
     block_reason: str | None = None
     error: str | None = None
+    truncated: bool = False  # body hit BODY_CAP_BYTES; signals past the cap were not read
 
     @property
     def responded(self) -> bool:
@@ -135,8 +139,11 @@ async def _attempt(client: httpx.AsyncClient, host: str, url: str) -> FetchResul
         raw = bytearray()
         async for chunk in response.aiter_bytes():
             raw.extend(chunk)
-            if len(raw) >= BODY_CAP_BYTES:
+            # Read one byte past the cap so a body of exactly BODY_CAP_BYTES is
+            # not misreported as truncated.
+            if len(raw) > BODY_CAP_BYTES:
                 break
+    truncated = len(raw) > BODY_CAP_BYTES
     body = _decode(bytes(raw[:BODY_CAP_BYTES]), response)
     block_reason = _classify_block(response.status_code, response.headers, body.lower())
     return FetchResult(
@@ -149,6 +156,7 @@ async def _attempt(client: httpx.AsyncClient, host: str, url: str) -> FetchResul
         body=body,
         blocked=block_reason is not None,
         block_reason=block_reason,
+        truncated=truncated,
     )
 
 

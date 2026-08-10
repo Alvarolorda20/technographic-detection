@@ -3,11 +3,13 @@
 import json
 from pathlib import Path
 
+import dns.resolver
 import httpx
 import pytest
 from conftest import FakeResolver, cname, mx, txt
 
 from techdetect import cli, scanner
+from techdetect.dns_records import DnsClient
 from techdetect.engine import DEFAULT_FINGERPRINTS_PATH, load_fingerprints
 from techdetect.scanner import normalize_domain, read_domains, scan_all
 
@@ -26,6 +28,8 @@ def handler(request: httpx.Request) -> httpx.Response:
             headers={"cf-ray": "8abc-EWR"},
             html='<html><link href="/wp-content/x.css">Forbidden</html>',
         )
+    if host in ("jsapp.test", "www.jsapp.test"):
+        return httpx.Response(200, html="<html><script>window.Intercom.booted;</script></html>")
     if host == "moved.test":
         return httpx.Response(301, headers={"location": "https://app.moved.test/"})
     if host == "app.moved.test":
@@ -96,8 +100,27 @@ async def test_redirect_to_new_host_triggers_extra_cname_lookup(fingerprints):
     resolver = FakeResolver({("app.moved.test", "CNAME"): [cname("x.salesforce.com.")]})
     async with make_test_client() as client:
         (report,) = await scan_all(["moved.test"], fingerprints, client=client, resolver=resolver)
-    assert ("app.moved.test", "CNAME", 3.0) in resolver.queries
+    assert ("app.moved.test", "CNAME") in {(host, rtype) for host, rtype, _ in resolver.queries}
     assert report.technologies == ["Salesforce"]
+
+
+async def test_dns_failure_marks_the_report_incomplete(fingerprints):
+    """A domain whose MX lookup never answered is not a clean negative: the
+    report must say so, because Google Workspace is neither found nor excluded."""
+    resolver = FakeResolver({("wp.test", "MX"): dns.resolver.LifetimeTimeout()})
+    async with make_test_client() as client:
+        (report,) = await scan_all(["wp.test"], fingerprints, client=client, resolver=resolver)
+    assert report.technologies == ["WordPress"]  # page evidence is unaffected
+    assert "Google Workspace" not in report.technologies
+    assert not report.complete
+    assert report.dns_failures == ["MX wp.test: LifetimeTimeout"]
+
+
+async def test_clean_scan_reports_complete(fingerprints):
+    resolver = FakeResolver({("wp.test", "MX"): [mx("aspmx.l.google.com.")]})
+    async with make_test_client() as client:
+        (report,) = await scan_all(["wp.test"], fingerprints, client=client, resolver=resolver)
+    assert report.complete and report.dns_failures == [] and not report.truncated
 
 
 @pytest.fixture
@@ -105,17 +128,12 @@ def offline_cli(monkeypatch):
     """Route the CLI's network edges through the offline fakes."""
     fake_resolver = FakeResolver({("wp.test", "MX"): [mx("aspmx.l.google.com.")]})
 
-    async def fake_collect_dns(host, resolver=None, cname_hosts=(), lifetime=3.0):
-        from techdetect.dns_records import collect_dns
-
-        return await collect_dns(host, resolver=fake_resolver, cname_hosts=cname_hosts)
-
-    async def fake_collect_cname(host, resolver=None, lifetime=3.0):
-        return []
-
     monkeypatch.setattr(scanner, "make_client", lambda timeout=8.0: make_test_client())
-    monkeypatch.setattr(scanner, "collect_dns", fake_collect_dns)
-    monkeypatch.setattr(scanner, "collect_cname", fake_collect_cname)
+    monkeypatch.setattr(
+        scanner,
+        "DnsClient",
+        lambda resolver=None, **kwargs: DnsClient(resolver=fake_resolver, attempts=1),
+    )
     return fake_resolver
 
 
@@ -149,6 +167,43 @@ def test_cli_stdout_stays_clean_json(capsys, tmp_path, offline_cli):
     assert cli.main([str(domains_file)]) == 0
     parsed = json.loads(capsys.readouterr().out)
     assert parsed == {"wp.test": ["Google Workspace", "WordPress"]}
+
+
+def test_cli_unwritable_output_is_fatal(tmp_path, offline_cli):
+    """An unwritable results path is a fatal error, not a traceback."""
+    domains_file = tmp_path / "domains.txt"
+    domains_file.write_text("wp.test\n", encoding="utf-8")
+    out = tmp_path / "missing" / "output.json"  # parent directory does not exist
+    assert cli.main([str(domains_file), "-o", str(out), "-q"]) == 1
+
+
+def test_cli_unwritable_evidence_is_fatal(tmp_path, offline_cli):
+    """Evidence failing to write is fatal too, but the results already landed."""
+    domains_file = tmp_path / "domains.txt"
+    domains_file.write_text("wp.test\n", encoding="utf-8")
+    out = tmp_path / "output.json"
+    evidence_path = tmp_path / "missing" / "evidence.json"
+    code = cli.main([str(domains_file), "-o", str(out), "--evidence", str(evidence_path), "-q"])
+    assert code == 1
+    assert out.exists()
+
+
+def test_cli_js_channel_is_opt_in_end_to_end(tmp_path, offline_cli):
+    """Same page, same fingerprints: the js channel only fires when asked for."""
+    fingerprints_file = tmp_path / "fp.json"
+    fingerprints_file.write_text(
+        json.dumps({"Intercom": {"js": {"Intercom.booted": ""}}}), encoding="utf-8"
+    )
+    domains_file = tmp_path / "domains.txt"
+    domains_file.write_text("jsapp.test\n", encoding="utf-8")
+    out = tmp_path / "output.json"
+    base = [str(domains_file), "-o", str(out), "--fingerprints", str(fingerprints_file), "-q"]
+
+    assert cli.main(base) == 0
+    assert json.loads(out.read_text(encoding="utf-8")) == {"jsapp.test": []}
+
+    assert cli.main([*base, "--enable-js-channel"]) == 0
+    assert json.loads(out.read_text(encoding="utf-8")) == {"jsapp.test": ["Intercom"]}
 
 
 def test_cli_missing_domains_file_is_fatal(tmp_path):

@@ -3,8 +3,9 @@
 Compatibility scope: this module is format-compatible with the open-source
 Wappalyzer technology schema and needs zero technology-specific code changes
 for the channels it supports (headers, cookies, scriptSrc, scripts, script,
-html, meta, dns MX/TXT/CNAME). Patterns in unsupported channels (js, dom,
-xhr, ...) are skipped safely and counted so callers can report them.
+html, meta, dns MX/TXT/CNAME, and js when explicitly enabled). Patterns in
+unsupported channels (dom, xhr, ...) are skipped safely and counted so callers
+can report them.
 """
 
 from __future__ import annotations
@@ -26,7 +27,6 @@ DEFAULT_CONFIDENCE = 100
 CONFIDENCE_CAP = 100
 SNIPPET_WIDTH = 60
 
-SUPPORTED_CHANNELS = {"headers", "cookies", "scriptSrc", "scripts", "script", "html", "meta", "dns"}
 LIST_CHANNELS = {"scriptSrc", "scripts", "script", "html"}
 SUPPORTED_DNS_TYPES = {"MX", "TXT", "CNAME"}
 # Wappalyzer keys that are descriptive metadata, not matchable patterns.
@@ -69,6 +69,7 @@ class Rule:
     name_regex: re.Pattern[str] | None = None  # headers/cookies dict key
     meta_name: str | None = None
     dns_type: str | None = None
+    js_path: str | None = None  # window.* global path, matched literally
 
 
 @dataclass(frozen=True)
@@ -244,10 +245,17 @@ def _apply_rule(rule: Rule, signals: SignalSet) -> MatchEvidence | None:
     if rule.channel == "dns":
         assert rule.dns_type is not None
         return _match_texts(rule, signals.dns.get(rule.dns_type, []), label=f"{rule.dns_type} ")
+    if rule.channel == "js":
+        # Statically, the strongest available proxy for "this global exists at
+        # runtime" is the literal property path appearing in executable source.
+        # Weaker evidence than every other channel — hence opt-in only.
+        return _match_texts(rule, signals.inline_scripts, label="js: ", guard_serialized_html=True)
     raise AssertionError(f"unreachable channel {rule.channel!r}")
 
 
-def load_fingerprints(path: str | Path | Traversable, strict: bool = False) -> FingerprintSet:
+def load_fingerprints(
+    path: str | Path | Traversable, strict: bool = False, enable_js: bool = False
+) -> FingerprintSet:
     """Load a Wappalyzer-format fingerprint JSON file.
 
     ``path`` may be a filesystem path or an ``importlib.resources`` traversable
@@ -256,6 +264,10 @@ def load_fingerprints(path: str | Path | Traversable, strict: bool = False) -> F
     ``strict=True`` (used for the bundled set) fails on ANY skipped or invalid
     pattern; the lenient default (external files such as the full Wappalyzer
     database) skips incompatible patterns with warnings and per-channel counts.
+
+    ``enable_js=True`` compiles the ``js`` channel as a static approximation
+    (see ``_apply_rule``). It is off by default because source text containing a
+    global's name does not establish that the global exists at runtime.
     """
     source = Path(path) if isinstance(path, str) else path
     try:
@@ -300,6 +312,23 @@ def load_fingerprints(path: str | Path | Traversable, strict: bool = False) -> F
         except _SkipPattern:
             pass
 
+    def js_rule(tech: str, global_path: str, val_raw: object) -> Rule:
+        """A ``js`` entry: the key is a literal global path, the value only
+        carries version/confidence tags (never a pattern for the path)."""
+        path = str(global_path).strip()
+        if not path:
+            skip("js:malformed", 1, f"{tech}: empty js global path")
+            raise _SkipPattern
+        _, confidence = _parse_pattern(str(val_raw))
+        return Rule(
+            technology=tech,
+            channel="js",
+            raw_pattern=f"js:{path}",
+            confidence=confidence,
+            value_regex=re.compile(re.escape(path), re.IGNORECASE),
+            js_path=path,
+        )
+
     def header_cookie_rule(tech: str, key: str, name_raw: str, val_raw: object) -> Rule:
         name_regex = compile_regex(tech, key, name_raw, name_raw)
         base = value_rule(tech, key, val_raw)
@@ -337,6 +366,15 @@ def load_fingerprints(path: str | Path | Traversable, strict: bool = False) -> F
                                 t, "meta", r, meta_name=n.strip().lower()
                             )
                         )
+            elif key == "js":
+                if not enable_js:
+                    skip("js", _pattern_count(value), f"{tech}: js channel disabled")
+                    continue
+                if not isinstance(value, dict):
+                    skip("js:malformed", _pattern_count(value), f"{tech}: js not a dict")
+                    continue
+                for global_path, raw in value.items():
+                    add(lambda t=tech, g=global_path, r=raw: js_rule(t, g, r))
             elif key == "dns":
                 if not isinstance(value, dict):
                     skip("dns:malformed", _pattern_count(value), f"{tech}: dns not a dict")

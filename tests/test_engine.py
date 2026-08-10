@@ -187,6 +187,51 @@ def test_inline_dynamic_loader_still_counts_as_usage(tmp_path):
     assert fps.match(SignalSet(inline_scripts=[both]))[0] == ["Sentry"]
 
 
+def test_js_channel_is_skipped_unless_enabled(tmp_path):
+    data = {"Intercom": {"js": {"Intercom.booted": ""}}}
+    fps = load_from(tmp_path, data)
+    assert fps.pattern_count == 0
+    assert fps.skipped["js"] == 1
+
+
+def test_js_channel_matches_global_path_in_inline_scripts(tmp_path):
+    path = tmp_path / "fp.json"
+    path.write_text(json.dumps({"Intercom": {"js": {"Intercom.booted": ""}}}), encoding="utf-8")
+    fps = load_fingerprints(path, enable_js=True)
+    (rule,) = fps.rules
+    assert rule.channel == "js" and rule.js_path == "Intercom.booted"
+
+    hit, evidence = fps.match(SignalSet(inline_scripts=["window.Intercom.booted = true;"]))
+    assert hit == ["Intercom"]
+    assert evidence[0].channel == "js"
+    # The path is literal, not a regex: the '.' must not match any character.
+    assert fps.match(SignalSet(inline_scripts=["IntercomXbooted"]))[0] == []
+    # Page prose is not source: only executable inline scripts feed this channel.
+    assert fps.match(SignalSet(html="Intercom.booted"))[0] == []
+
+
+def test_js_channel_honors_confidence_tags_and_skips_serialized_html(tmp_path):
+    path = tmp_path / "fp.json"
+    path.write_text(
+        json.dumps({"T": {"js": {"Foo.bar": "\\;confidence:50\\;version:\\1"}}}), encoding="utf-8"
+    )
+    fps = load_fingerprints(path, enable_js=True)
+    assert fps.rules[0].confidence == 50
+    docs = 'const s = "\\u003cscript>Foo.bar\\u003c/script>";'
+    assert fps.match(SignalSet(inline_scripts=[docs]), min_confidence=50)[0] == []
+    assert fps.match(SignalSet(inline_scripts=["Foo.bar()"]), min_confidence=50)[0] == ["T"]
+
+
+def test_real_wappalyzer_excerpt_compiles_js_when_enabled():
+    """The genuine database's js entries load unchanged once enabled — the
+    channel is off by policy, not because the format is unsupported."""
+    off = load_fingerprints(REAL_EXCERPT)
+    on = load_fingerprints(REAL_EXCERPT, enable_js=True)
+    assert on.pattern_count == off.pattern_count + off.skipped["js"]
+    assert not on.skipped["js"]
+    assert any(rule.channel == "js" for rule in on.rules)
+
+
 def test_real_wappalyzer_excerpt_loads_and_reports_skips():
     fps = load_fingerprints(REAL_EXCERPT)  # lenient, like any external DB
     assert fps.pattern_count > 20

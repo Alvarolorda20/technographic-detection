@@ -10,19 +10,17 @@ from dataclasses import dataclass, field
 
 import httpx
 
-from techdetect.dns_records import collect_cname, collect_dns
+from techdetect.dns_records import DnsClient, DnsRecords
 from techdetect.engine import DEFAULT_CONFIDENCE, FingerprintSet, MatchEvidence
 from techdetect.extract import SignalSet, extract_page_signals
-from techdetect.fetcher import FetchResult, fetch_homepage, make_client
+from techdetect.fetcher import BODY_CAP_BYTES, FetchResult, fetch_homepage, make_client
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_CONCURRENCY = 10
 DOMAIN_DEADLINE = 20.0  # hard cap on fetch time per domain (defuses trickling bodies)
-DNS_DEADLINE = 10.0
-EXTRA_CNAME_DEADLINE = 5.0
-
-EMPTY_DNS: dict[str, list[str]] = {"MX": [], "TXT": [], "CNAME": []}
+DNS_DEADLINE = 15.0
+EXTRA_CNAME_DEADLINE = 8.0
 
 
 def normalize_domain(line: str) -> str | None:
@@ -54,6 +52,16 @@ class DomainReport:
     block_reason: str | None = None
     error: str | None = None
     elapsed: float = 0.0
+    # Partial-measurement flags: the scan produced an answer, but not from all
+    # the evidence it meant to read. Both make a missing technology ambiguous,
+    # so neither may stay silent.
+    dns_failures: list[str] = field(default_factory=list)
+    truncated: bool = False
+
+    @property
+    def complete(self) -> bool:
+        """True when every channel this domain has was read in full."""
+        return not self.dns_failures and not self.truncated
 
 
 async def _fetch_bounded(client: httpx.AsyncClient, host: str) -> FetchResult:
@@ -64,30 +72,30 @@ async def _fetch_bounded(client: httpx.AsyncClient, host: str) -> FetchResult:
         return FetchResult(domain=host, error=f"fetch exceeded {DOMAIN_DEADLINE:.0f}s deadline")
 
 
-async def _dns_bounded(host: str, resolver) -> dict[str, list[str]]:
+async def _dns_bounded(host: str, dns_client: DnsClient) -> DnsRecords:
     try:
         async with asyncio.timeout(DNS_DEADLINE):
-            return await collect_dns(host, resolver=resolver, cname_hosts=(f"www.{host}",))
+            return await dns_client.collect(host, cname_hosts=(f"www.{host}",))
     except TimeoutError:
-        logger.debug("DNS collection for %s exceeded %.0fs deadline", host, DNS_DEADLINE)
-        return dict(EMPTY_DNS)
+        return DnsRecords(failures=[f"all records {host}: collection exceeded {DNS_DEADLINE:.0f}s"])
 
 
 async def scan_domain(
     client: httpx.AsyncClient,
     host: str,
     fingerprints: FingerprintSet,
-    resolver=None,
+    dns_client: DnsClient | None = None,
     min_confidence: int = DEFAULT_CONFIDENCE,
 ) -> DomainReport:
     """Scan one domain. Never raises: any unexpected error becomes report.error."""
     started = time.perf_counter()
+    dns_client = dns_client or DnsClient()
     try:
         fetch_result, dns_records = await asyncio.gather(
-            _fetch_bounded(client, host), _dns_bounded(host, resolver)
+            _fetch_bounded(client, host), _dns_bounded(host, dns_client)
         )
 
-        signals = SignalSet(dns=dns_records)
+        signals = SignalSet(dns=dns_records.records)
         if fetch_result.responded:
             # Headers, cookies and DNS are trustworthy even on blocked/error
             # responses; page-derived channels only when the body is the
@@ -105,11 +113,12 @@ async def scan_domain(
         if final_host and final_host not in (host, f"www.{host}"):
             try:
                 async with asyncio.timeout(EXTRA_CNAME_DEADLINE):
-                    extra = await collect_cname(final_host, resolver=resolver)
+                    extra = await dns_client.collect_cname(final_host)
             except TimeoutError:
-                extra = []
-            merged = signals.dns.get("CNAME", []) + extra
+                extra = DnsRecords(failures=[f"CNAME {final_host}: exceeded deadline"])
+            merged = signals.dns.get("CNAME", []) + extra.records["CNAME"]
             signals.dns["CNAME"] = list(dict.fromkeys(merged))
+            dns_records.failures.extend(extra.failures)
 
         technologies, evidence = fingerprints.match(signals, min_confidence=min_confidence)
         for record in evidence:
@@ -130,6 +139,8 @@ async def scan_domain(
             block_reason=fetch_result.block_reason,
             error=fetch_result.error,
             elapsed=time.perf_counter() - started,
+            dns_failures=dns_records.failures,
+            truncated=fetch_result.truncated,
         )
     except Exception as exc:  # the never-crash contract: isolate per-domain bugs
         logger.error("%s: unexpected error: %s: %s", host, exc.__class__.__name__, exc)
@@ -149,8 +160,13 @@ async def scan_all(
     client: httpx.AsyncClient | None = None,
     resolver=None,
 ) -> list[DomainReport]:
-    """Scan all domains concurrently; results keep input order."""
+    """Scan all domains concurrently; results keep input order.
+
+    One ``DnsClient`` is built here and shared by every domain, so its cache and
+    its concurrency limit apply to the scan as a whole rather than per domain.
+    """
     semaphore = asyncio.Semaphore(concurrency)
+    dns_client = DnsClient(resolver=resolver)
     own_client = client is None
     if client is None:
         client = make_client(timeout)
@@ -158,7 +174,7 @@ async def scan_all(
     async def run(host: str) -> DomainReport:
         async with semaphore:
             report = await scan_domain(
-                client, host, fingerprints, resolver=resolver, min_confidence=min_confidence
+                client, host, fingerprints, dns_client=dns_client, min_confidence=min_confidence
             )
         state = f"HTTP {report.status}" if report.status else "no response"
         if report.blocked:
@@ -170,6 +186,22 @@ async def scan_all(
             state,
             report.elapsed,
         )
+        # A partial read can only hide a technology, never invent one, so it is
+        # a warning rather than an error — but it must be visible by default.
+        if report.dns_failures:
+            logger.warning(
+                "%s: %d DNS lookup(s) produced no answer (%s) — a missing DNS-based "
+                "technology is unconfirmed here, not absent",
+                host,
+                len(report.dns_failures),
+                "; ".join(report.dns_failures),
+            )
+        if report.truncated:
+            logger.warning(
+                "%s: response body hit the %d byte cap — page signals past the cap were not read",
+                host,
+                BODY_CAP_BYTES,
+            )
         return report
 
     try:

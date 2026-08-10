@@ -123,13 +123,27 @@ async def test_503_challenge_vs_plain_503():
     assert not maintenance.page_trusted
 
 
-async def test_body_is_capped():
+async def test_body_is_capped_and_truncation_is_flagged():
+    """Past the cap, page signals go unread — a silent truncation would look
+    exactly like a technology that is not there."""
+
     def handler(request):
         return httpx.Response(200, content=b"a" * (BODY_CAP_BYTES + 100_000))
 
     async with client_for(handler) as client:
         result = await fetch_homepage(client, "big.test")
     assert len(result.body) <= BODY_CAP_BYTES
+    assert result.truncated
+
+
+async def test_body_exactly_at_the_cap_is_not_truncated():
+    def handler(request):
+        return httpx.Response(200, content=b"a" * BODY_CAP_BYTES)
+
+    async with client_for(handler) as client:
+        result = await fetch_homepage(client, "exact.test")
+    assert len(result.body) == BODY_CAP_BYTES
+    assert not result.truncated
 
 
 async def test_charset_decoding_with_fallback():
