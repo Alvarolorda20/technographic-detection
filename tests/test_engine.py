@@ -12,11 +12,10 @@ from pathlib import Path
 
 import pytest
 
-from techdetect.engine import FingerprintError, load_fingerprints
+from techdetect.engine import DEFAULT_FINGERPRINTS_PATH, FingerprintError, load_fingerprints
 from techdetect.extract import SignalSet
 
-ROOT = Path(__file__).resolve().parent.parent
-BUNDLED = ROOT / "fingerprints.json"
+BUNDLED = DEFAULT_FINGERPRINTS_PATH  # shipped as package data, not a repo-root file
 REAL_EXCERPT = Path(__file__).resolve().parent / "fixtures" / "technologies_real_excerpt.json"
 
 
@@ -31,6 +30,19 @@ def test_bundled_set_is_strictly_valid():
     assert fps.pattern_count == 24
     assert fps.technology_count == 16
     assert not fps.skipped
+
+
+def test_bundled_set_loads_as_package_data():
+    """The default set resolves through importlib.resources, so an installed
+    wheel works without the repository checkout."""
+    assert DEFAULT_FINGERPRINTS_PATH.is_file()
+    assert json.loads(DEFAULT_FINGERPRINTS_PATH.read_text(encoding="utf-8"))
+
+
+def test_load_accepts_a_plain_string_path(tmp_path):
+    path = tmp_path / "fp.json"
+    path.write_text(json.dumps({"T": {"html": "foo"}}), encoding="utf-8")
+    assert load_fingerprints(str(path)).pattern_count == 1
 
 
 def test_confidence_and_version_tags_parsed(tmp_path):

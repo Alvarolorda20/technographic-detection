@@ -161,6 +161,62 @@ def test_cli_empty_domains_file_is_fatal(tmp_path):
     assert cli.main([str(empty)]) == 1
 
 
+@pytest.mark.parametrize(
+    "bad_args",
+    [
+        ["--concurrency", "0"],
+        ["--concurrency", "-1"],
+        ["--concurrency", "abc"],
+        ["--timeout", "0"],
+        ["--timeout", "-1"],
+        ["--timeout", "abc"],
+        ["--min-confidence", "-1"],
+        ["--min-confidence", "101"],
+        ["--min-confidence", "abc"],
+    ],
+)
+def test_cli_rejects_invalid_numeric_arguments(tmp_path, capsys, bad_args):
+    """Invalid values fail as argparse usage errors (exit 2), never as an
+    internal exception or a Semaphore(0) deadlock."""
+    domains_file = tmp_path / "domains.txt"
+    domains_file.write_text("example.com\n", encoding="utf-8")
+    with pytest.raises(SystemExit) as exc:
+        cli.main([str(domains_file), *bad_args])
+    assert exc.value.code == 2
+    assert bad_args[0] in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("value", ["nan", "NaN", "inf", "-inf", "1e309", "Infinity"])
+def test_cli_rejects_non_finite_timeouts(tmp_path, capsys, monkeypatch, value):
+    """float() parses these, but none is a usable timeout; they must fail at
+    parse time and never reach the scanner."""
+    scanned = False
+
+    async def fail_if_called(*args, **kwargs):
+        nonlocal scanned
+        scanned = True
+        return []
+
+    monkeypatch.setattr(cli, "scan_all", fail_if_called)
+    domains_file = tmp_path / "domains.txt"
+    domains_file.write_text("example.com\n", encoding="utf-8")
+
+    with pytest.raises(SystemExit) as exc:
+        cli.main([str(domains_file), "--timeout", value])
+    assert exc.value.code == 2
+    assert "--timeout" in capsys.readouterr().err
+    assert not scanned
+
+
+@pytest.mark.parametrize("value", ["0", "100"])
+def test_cli_accepts_min_confidence_boundaries(tmp_path, offline_cli, value):
+    domains_file = tmp_path / "domains.txt"
+    domains_file.write_text("wp.test\n", encoding="utf-8")
+    out = tmp_path / "output.json"
+    assert cli.main([str(domains_file), "-o", str(out), "--min-confidence", value, "-q"]) == 0
+    assert "WordPress" in json.loads(out.read_text(encoding="utf-8"))["wp.test"]
+
+
 def test_cli_unparseable_fingerprints_is_fatal(tmp_path):
     bad = tmp_path / "bad.json"
     bad.write_text("{not json", encoding="utf-8")

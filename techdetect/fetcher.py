@@ -68,8 +68,13 @@ class FetchResult:
 
     @property
     def page_trusted(self) -> bool:
-        """True when the body can be treated as the site's own homepage."""
-        return self.responded and self.status < 400 and not self.blocked
+        """True when the body can be treated as the site's own homepage.
+
+        Only successful 2xx responses qualify. A final 3xx (an unfollowed or
+        terminal redirect, or a 304) carries no representation of the page, so
+        its body must never feed the HTML, script or meta channels.
+        """
+        return self.responded and 200 <= self.status < 300 and not self.blocked
 
 
 def make_client(timeout: float = DEFAULT_TIMEOUT, **kwargs) -> httpx.AsyncClient:

@@ -1,6 +1,7 @@
 """Fetcher tests via httpx.MockTransport (no network)."""
 
 import httpx
+import pytest
 
 from techdetect.fetcher import BODY_CAP_BYTES, FetchResult, fetch_homepage
 
@@ -144,8 +145,49 @@ async def test_charset_decoding_with_fallback():
     assert "café" in result.body
 
 
-def test_page_trusted_logic():
-    assert FetchResult(domain="d", status=200).page_trusted
-    assert not FetchResult(domain="d", status=200, blocked=True).page_trusted
-    assert not FetchResult(domain="d", status=404).page_trusted
+@pytest.mark.parametrize(
+    ("status", "blocked", "trusted"),
+    [
+        (200, False, True),
+        (204, False, True),  # trusted even though the body is empty
+        (299, False, True),
+        (301, False, False),  # a final 3xx carries no page representation
+        (302, False, False),
+        (304, False, False),
+        (403, False, False),
+        (404, False, False),
+        (500, False, False),
+        (200, True, False),  # 200 challenge page classified as blocked
+    ],
+)
+def test_page_trusted_only_for_unblocked_2xx(status, blocked, trusted):
+    assert FetchResult(domain="d", status=status, blocked=blocked).page_trusted is trusted
+
+
+def test_page_not_trusted_without_a_response():
     assert not FetchResult(domain="d").page_trusted
+
+
+async def test_final_3xx_response_is_not_trusted_end_to_end():
+    """A terminal redirect (no Location to follow) must not feed page channels."""
+
+    def handler(request):
+        return httpx.Response(302, html='<html><link href="/wp-content/x.css"></html>')
+
+    async with client_for(handler) as client:
+        result = await fetch_homepage(client, "redirloop.test")
+    assert result.status == 302
+    assert not result.blocked
+    assert not result.page_trusted
+    assert result.body  # body was still read, it is simply not trusted
+
+
+async def test_204_no_content_is_trusted_end_to_end():
+    def handler(request):
+        return httpx.Response(204)
+
+    async with client_for(handler) as client:
+        result = await fetch_homepage(client, "empty.test")
+    assert result.status == 204
+    assert result.page_trusted
+    assert result.body == ""

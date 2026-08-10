@@ -27,6 +27,9 @@ techdetect = "techdetect.cli:main"
 [tool.setuptools.packages.find]
 include = ["techdetect*"]
 
+[tool.setuptools.package-data]
+techdetect = ["data/*.json"]
+
 [tool.pytest.ini_options]
 addopts = "-m 'not network'"
 markers = [

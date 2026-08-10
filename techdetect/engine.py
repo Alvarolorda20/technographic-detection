@@ -14,6 +14,8 @@ import logging
 import re
 from collections import Counter
 from dataclasses import dataclass
+from importlib import resources
+from importlib.resources.abc import Traversable
 from pathlib import Path
 
 from techdetect.extract import SignalSet
@@ -43,7 +45,8 @@ METADATA_KEYS = {
     "excludes",
 }
 
-DEFAULT_FINGERPRINTS_PATH = Path(__file__).resolve().parent.parent / "fingerprints.json"
+# Shipped as package data, so an installed wheel works without the repo checkout.
+DEFAULT_FINGERPRINTS_PATH = resources.files("techdetect") / "data" / "fingerprints.json"
 
 
 class FingerprintError(ValueError):
@@ -244,15 +247,19 @@ def _apply_rule(rule: Rule, signals: SignalSet) -> MatchEvidence | None:
     raise AssertionError(f"unreachable channel {rule.channel!r}")
 
 
-def load_fingerprints(path: str | Path, strict: bool = False) -> FingerprintSet:
+def load_fingerprints(path: str | Path | Traversable, strict: bool = False) -> FingerprintSet:
     """Load a Wappalyzer-format fingerprint JSON file.
+
+    ``path`` may be a filesystem path or an ``importlib.resources`` traversable
+    (how the bundled set is shipped), so an installed wheel needs no checkout.
 
     ``strict=True`` (used for the bundled set) fails on ANY skipped or invalid
     pattern; the lenient default (external files such as the full Wappalyzer
     database) skips incompatible patterns with warnings and per-channel counts.
     """
+    source = Path(path) if isinstance(path, str) else path
     try:
-        data = json.loads(Path(path).read_text(encoding="utf-8"))
+        data = json.loads(source.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise FingerprintError(f"cannot load fingerprints from {path}: {exc}") from exc
     if not isinstance(data, dict):

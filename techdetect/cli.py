@@ -12,6 +12,7 @@ import asyncio
 import dataclasses
 import json
 import logging
+import math
 import sys
 import time
 from pathlib import Path
@@ -26,6 +27,46 @@ from techdetect.engine import (
 from techdetect.scanner import DEFAULT_CONCURRENCY, read_domains, scan_all
 
 logger = logging.getLogger("techdetect")
+
+
+def positive_int(value: str) -> int:
+    """argparse type: an integer strictly greater than zero."""
+    try:
+        parsed = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{value!r} is not an integer") from None
+    if parsed < 1:
+        raise argparse.ArgumentTypeError(f"must be greater than 0, got {parsed}")
+    return parsed
+
+
+def positive_float(value: str) -> float:
+    """argparse type: a finite float strictly greater than zero.
+
+    ``float()`` happily parses ``nan``, ``inf`` and overflowing literals such
+    as ``1e309``; none of those are usable timeouts, so finiteness is checked
+    explicitly.
+    """
+    try:
+        parsed = float(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{value!r} is not a number") from None
+    if not math.isfinite(parsed):
+        raise argparse.ArgumentTypeError(f"must be a finite number, got {value!r}")
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError(f"must be greater than 0, got {parsed}")
+    return parsed
+
+
+def confidence_int(value: str) -> int:
+    """argparse type: an integer percentage from 0 to 100 inclusive."""
+    try:
+        parsed = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{value!r} is not an integer") from None
+    if not 0 <= parsed <= 100:
+        raise argparse.ArgumentTypeError(f"must be between 0 and 100, got {parsed}")
+    return parsed
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -49,19 +90,20 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--min-confidence",
-        type=int,
+        type=confidence_int,
         default=DEFAULT_CONFIDENCE,
+        metavar="0-100",
         help="confidence total a technology must reach to be reported (default: %(default)s)",
     )
     parser.add_argument(
         "--concurrency",
-        type=int,
+        type=positive_int,
         default=DEFAULT_CONCURRENCY,
         help="concurrent domain scans (default: %(default)s)",
     )
     parser.add_argument(
         "--timeout",
-        type=float,
+        type=positive_float,
         default=8.0,
         help="per-request timeout in seconds (default: %(default)s)",
     )
