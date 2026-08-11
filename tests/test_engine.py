@@ -19,10 +19,10 @@ BUNDLED = DEFAULT_FINGERPRINTS_PATH  # shipped as package data, not a repo-root 
 REAL_EXCERPT = Path(__file__).resolve().parent / "fixtures" / "technologies_real_excerpt.json"
 
 
-def load_from(tmp_path, data, strict=False):
+def load_from(tmp_path, data, strict=False, enable_js=False):
     path = tmp_path / "fingerprints.json"
     path.write_text(json.dumps(data), encoding="utf-8")
-    return load_fingerprints(path, strict=strict)
+    return load_fingerprints(path, strict=strict, enable_js=enable_js)
 
 
 def test_bundled_set_is_strictly_valid():
@@ -187,6 +187,29 @@ def test_inline_dynamic_loader_still_counts_as_usage(tmp_path):
     assert fps.match(SignalSet(inline_scripts=[both]))[0] == ["Sentry"]
 
 
+def test_inline_string_literal_counts_as_usage_by_design(tmp_path):
+    """The accepted trade-off of the `script`/`scripts` channels, locked here.
+
+    A vendor URL sitting in an inline string literal is counted, even though it
+    may never be executed. The two forms below are statically indistinguishable
+    without evaluating the script, and the second is how third-party scripts are
+    normally provisioned — every `script`-channel detection in the committed run
+    comes from inline code, none from a `<script src>` attribute. Rejecting
+    string literals would therefore trade a rare false positive for the common
+    true positive.
+    """
+    fps = load_from(tmp_path, {"Stripe": {"script": "js\\.stripe\\.com/v3"}})
+    unused = 'const documentationExample = "https://js.stripe.com/v3";'
+    loader = 's.src = "https://js.stripe.com/v3"; document.head.appendChild(s);'
+    assert fps.match(SignalSet(inline_scripts=[unused]))[0] == ["Stripe"]
+    assert fps.match(SignalSet(inline_scripts=[loader]))[0] == ["Stripe"]
+    # The guards that *can* be decided statically still apply to both: the same
+    # URL inside a data blob never reaches this channel (see test_extract), and
+    # inside serialized HTML it is rejected here.
+    docs = 'x = "\\u003cscript src=\\"https://js.stripe.com/v3\\">";'
+    assert fps.match(SignalSet(inline_scripts=[docs]))[0] == []
+
+
 def test_js_channel_is_skipped_unless_enabled(tmp_path):
     data = {"Intercom": {"js": {"Intercom.booted": ""}}}
     fps = load_from(tmp_path, data)
@@ -195,31 +218,151 @@ def test_js_channel_is_skipped_unless_enabled(tmp_path):
 
 
 def test_js_channel_matches_global_path_in_inline_scripts(tmp_path):
-    path = tmp_path / "fp.json"
-    path.write_text(json.dumps({"Intercom": {"js": {"Intercom.booted": ""}}}), encoding="utf-8")
-    fps = load_fingerprints(path, enable_js=True)
+    fps = load_from(tmp_path, {"Intercom": {"js": {"Intercom.booted": ""}}}, enable_js=True)
     (rule,) = fps.rules
     assert rule.channel == "js" and rule.js_path == "Intercom.booted"
+    assert rule.js_needle == "Intercom"  # longest segment, the matcher's pre-filter
 
     hit, evidence = fps.match(SignalSet(inline_scripts=["window.Intercom.booted = true;"]))
     assert hit == ["Intercom"]
     assert evidence[0].channel == "js"
-    # The path is literal, not a regex: the '.' must not match any character.
-    assert fps.match(SignalSet(inline_scripts=["IntercomXbooted"]))[0] == []
+    # The evidence is the access itself, not a bare occurrence of the name.
+    assert "window.Intercom.booted" in evidence[0].matched_signal
+    # The path is not a regex: the '.' must not match any character.
+    assert fps.match(SignalSet(inline_scripts=["window.IntercomXbooted"]))[0] == []
     # Page prose is not source: only executable inline scripts feed this channel.
-    assert fps.match(SignalSet(html="Intercom.booted"))[0] == []
+    assert fps.match(SignalSet(html="window.Intercom.booted"))[0] == []
+
+
+def test_js_channel_scans_every_inline_script(tmp_path):
+    """The pre-filter narrows the candidate scripts; it must not stop the scan
+    at the first one that fails to match."""
+    fps = load_from(tmp_path, {"Intercom": {"js": {"Intercom.booted": ""}}}, enable_js=True)
+    scripts = ["var x = 1;", "Intercom.booted;", "window.Intercom.booted;"]
+    assert fps.match(SignalSet(inline_scripts=scripts))[0] == ["Intercom"]
 
 
 def test_js_channel_honors_confidence_tags_and_skips_serialized_html(tmp_path):
-    path = tmp_path / "fp.json"
-    path.write_text(
-        json.dumps({"T": {"js": {"Foo.bar": "\\;confidence:50\\;version:\\1"}}}), encoding="utf-8"
+    fps = load_from(
+        tmp_path, {"T": {"js": {"Foo.bar": "\\;confidence:50\\;version:\\1"}}}, enable_js=True
     )
-    fps = load_fingerprints(path, enable_js=True)
     assert fps.rules[0].confidence == 50
-    docs = 'const s = "\\u003cscript>Foo.bar\\u003c/script>";'
+    docs = 'const s = "\\u003cscript>window.Foo.bar\\u003c/script>";'
     assert fps.match(SignalSet(inline_scripts=[docs]), min_confidence=50)[0] == []
-    assert fps.match(SignalSet(inline_scripts=["Foo.bar()"]), min_confidence=50)[0] == ["T"]
+    # Positive control: the identical access without the escaped tags does match,
+    # so the assertion above proves the guard fired rather than the regex missing.
+    plain = 'const s = "window.Foo.bar";'
+    assert fps.match(SignalSet(inline_scripts=[plain]), min_confidence=50)[0] == ["T"]
+    assert fps.match(SignalSet(inline_scripts=["window.Foo.bar()"]), min_confidence=50)[0] == ["T"]
+
+
+# --- js channel: what counts as a read of a global ---------------------------
+
+JS_ACCEPTED = [
+    "window.Intercom.booted = true;",
+    "globalThis.Intercom.booted",
+    "self.Intercom.booted",
+    'window["Intercom"].booted',
+    "window['Intercom'].booted",
+    "window [ 'Intercom' ] . booted",
+    "window . Intercom\n  .booted",
+    "self?.Intercom?.booted",
+    "if(window.Intercom.booted){}",
+]
+
+JS_REJECTED = [
+    "Intercom.booted = true;",  # no root: the motivating false positive
+    "var w = window; w.Intercom.booted",  # aliased root, see the dedicated test
+    "mywindow.Intercom.booted",  # the root must be a whole identifier
+    "window.IntercomX.booted",  # the first segment must end where the path does
+    "window.Intercom.bootedLater",  # and so must the last
+    "window.Intercom",  # a prefix of the path is not the path
+    "window.intercom.booted",  # property access is case-sensitive
+    "WINDOW.Intercom.booted",
+    'window["Intercom"]["booted"]',  # documented: brackets on the first segment only
+    "top.Intercom.booted",  # a cross-frame read is not this page
+    "parent.Intercom.booted",
+]
+
+
+@pytest.mark.parametrize("source", JS_ACCEPTED)
+def test_js_channel_accepts_reads_through_the_global_object(tmp_path, source):
+    fps = load_from(tmp_path, {"Intercom": {"js": {"Intercom.booted": ""}}}, enable_js=True)
+    assert fps.match(SignalSet(inline_scripts=[source]))[0] == ["Intercom"]
+
+
+@pytest.mark.parametrize("source", JS_REJECTED)
+def test_js_channel_rejects_everything_that_is_not_such_a_read(tmp_path, source):
+    fps = load_from(tmp_path, {"Intercom": {"js": {"Intercom.booted": ""}}}, enable_js=True)
+    assert fps.match(SignalSet(inline_scripts=[source]))[0] == []
+
+
+@pytest.mark.parametrize(
+    ("global_path", "source"),
+    [
+        ("Catch", "try { go(); } catch (err) {}"),
+        ("va", "var s, t;"),
+        ("Mage", '{"@type":"ImageObject"}'),
+        ("Espo", "bespoke.from(el);"),
+        ("Shopify", "const u = shopifyAccessUrl;"),
+        ("Chart", "chart.ctx.draw();"),
+    ],
+)
+def test_js_channel_ignores_incidental_source_text(tmp_path, global_path, source):
+    """Regression lock: every pair here was a detection under the previous
+    substring matcher, and every one of them was wrong."""
+    fps = load_from(tmp_path, {"T": {"js": {global_path: ""}}}, enable_js=True)
+    assert fps.match(SignalSet(inline_scripts=[source]))[0] == []
+
+
+@pytest.mark.parametrize(
+    ("global_path", "source", "needle"),
+    [
+        ("Intercom.booted", "window.Intercom.booted", "Intercom"),
+        (".__NEXT_DATA__.gsp", "window.__NEXT_DATA__.gsp", "__NEXT_DATA__"),  # leading dot
+        ("window.AudioEye.version", "window.AudioEye.version", "AudioEye"),  # explicit root
+        ("$.fn.jquery", "window.$.fn.jquery", "jquery"),  # regex metacharacter
+        ("Ext.versions.extjs.version", "window.Ext.versions.extjs.version", "versions"),
+        ("_hsq", "window._hsq.push(['trackPageView']);", "_hsq"),
+    ],
+)
+def test_js_channel_normalizes_real_database_spellings(tmp_path, global_path, source, needle):
+    fps = load_from(tmp_path, {"T": {"js": {global_path: ""}}}, enable_js=True)
+    assert fps.rules[0].js_needle == needle
+    assert fps.match(SignalSet(inline_scripts=[source]))[0] == ["T"]
+
+
+def test_js_channel_requires_every_segment_of_a_deep_path(tmp_path):
+    fps = load_from(tmp_path, {"T": {"js": {"Ext.versions.extjs.version": ""}}}, enable_js=True)
+    assert fps.match(SignalSet(inline_scripts=["window.Ext.versions.extjs.version"]))[0] == ["T"]
+    assert fps.match(SignalSet(inline_scripts=["window.Ext.versions.version"]))[0] == []
+
+
+@pytest.mark.parametrize("global_path", ["", "   ", ".", "a..b", "window", "window.", " . "])
+def test_js_channel_skips_unusable_global_paths(tmp_path, global_path):
+    fps = load_from(tmp_path, {"T": {"js": {global_path: ""}}}, enable_js=True)
+    assert fps.pattern_count == 0
+    assert fps.skipped["js:malformed"] == 1
+
+
+def test_js_channel_misses_aliased_globals_by_design(tmp_path):
+    """Intercom's own official snippet aliases the global (`var w=window; …
+    w.Intercom=i;`), so the technology is not detected from that snippet — the
+    same idiom is in Drift, Crisp and most paste-this loaders.
+
+    Relaxing the root to any short identifier was measured on real minified
+    code: it doubled the hits and every new one was wrong, because minified
+    access is always `X.name`. A correct fix needs per-script alias resolution,
+    i.e. scope analysis — a JavaScript parser. Locked here so that relaxing it
+    later is a deliberate decision.
+    """
+    snippet = "var w=window;var ic=w.Intercom;if(ic){ic('update');}else{w.Intercom=i;}"
+    fps = load_from(tmp_path, {"Intercom": {"js": {"Intercom": ""}}}, enable_js=True)
+    assert fps.match(SignalSet(inline_scripts=[snippet]))[0] == []
+    # The escape hatch for callers who want that recall is a `scripts` pattern,
+    # which matches arbitrary source text by design.
+    scripts = load_from(tmp_path, {"Intercom": {"scripts": "w\\.Intercom"}})
+    assert scripts.match(SignalSet(inline_scripts=[snippet]))[0] == ["Intercom"]
 
 
 def test_real_wappalyzer_excerpt_compiles_js_when_enabled():

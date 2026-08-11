@@ -69,7 +69,8 @@ class Rule:
     name_regex: re.Pattern[str] | None = None  # headers/cookies dict key
     meta_name: str | None = None
     dns_type: str | None = None
-    js_path: str | None = None  # window.* global path, matched literally
+    js_path: str | None = None  # global property path, as written in the fingerprint
+    js_needle: str | None = None  # longest path segment; pre-filter for the js matcher
 
 
 @dataclass(frozen=True)
@@ -207,6 +208,29 @@ def _inside_serialized_html(text: str, match_start: int) -> bool:
     return any(marker in window for marker in _ESCAPED_SCRIPT_TAG_MARKERS)
 
 
+# Roots accepted as "the global object" for the js channel. `top` and `parent`
+# are deliberately excluded: a cross-frame read is not evidence that this page
+# provisions the technology, and `parent` is a common local variable name.
+JS_GLOBAL_OBJECTS = ("window", "globalThis", "self")
+_JS_ROOT = r"(?<![\w$])(?:" + "|".join(JS_GLOBAL_OBJECTS) + r")"
+_JS_DOT = r"\s*\??\.\s*"  # `.x`, ` . x`, a line break, and optional chaining `?.x`
+_JS_END = r"(?![\w$])"  # `window.Foo` must not match `window.Foobar`
+
+
+def _js_access_regex(segments: list[str]) -> re.Pattern[str]:
+    """Match an explicit read of ``segments`` through the global object.
+
+    The first segment is reachable as ``.name`` or ``["name"]``; the rest only
+    as ``.name`` — bracket access on inner segments is not supported (a
+    documented limitation). Segments are escaped individually because real keys
+    contain regex metacharacters (jQuery's ``$.fn.jquery``).
+    """
+    first, *rest = (re.escape(segment) for segment in segments)
+    bracket = rf"\s*\[\s*(['\"]){first}\1\s*\]"
+    tail = "".join(_JS_DOT + segment for segment in rest)
+    return re.compile(rf"{_JS_ROOT}(?:{_JS_DOT}{first}|{bracket}){tail}{_JS_END}")
+
+
 def _match_texts(
     rule: Rule, texts: list[str], label: str = "", guard_serialized_html: bool = False
 ) -> MatchEvidence | None:
@@ -246,10 +270,21 @@ def _apply_rule(rule: Rule, signals: SignalSet) -> MatchEvidence | None:
         assert rule.dns_type is not None
         return _match_texts(rule, signals.dns.get(rule.dns_type, []), label=f"{rule.dns_type} ")
     if rule.channel == "js":
-        # Statically, the strongest available proxy for "this global exists at
-        # runtime" is the literal property path appearing in executable source.
-        # Weaker evidence than every other channel — hence opt-in only.
-        return _match_texts(rule, signals.inline_scripts, label="js: ", guard_serialized_html=True)
+        # No JavaScript is executed, so the strongest available static proxy for
+        # "this global exists at runtime" is an explicit read of it through the
+        # global object, not the bare name appearing somewhere in the source.
+        # Still weaker evidence than every other channel — a feature check reads
+        # exactly like real usage — hence opt-in only.
+        #
+        # The needle pre-filter is behaviour-preserving (every segment appears
+        # verbatim in any match, and this channel is case-sensitive) and is
+        # needed for speed: the alternated root defeats CPython's literal-prefix
+        # scan. Measured on the full database (5,639 js rules) against the
+        # heaviest test domain (1.3 MB of inline script): 4.7s with it, 194s
+        # without.
+        assert rule.js_needle is not None
+        texts = [text for text in signals.inline_scripts if rule.js_needle in text]
+        return _match_texts(rule, texts, label="js: ", guard_serialized_html=True)
     raise AssertionError(f"unreachable channel {rule.channel!r}")
 
 
@@ -265,9 +300,10 @@ def load_fingerprints(
     pattern; the lenient default (external files such as the full Wappalyzer
     database) skips incompatible patterns with warnings and per-channel counts.
 
-    ``enable_js=True`` compiles the ``js`` channel as a static approximation
-    (see ``_apply_rule``). It is off by default because source text containing a
-    global's name does not establish that the global exists at runtime.
+    ``enable_js=True`` compiles the ``js`` channel as a conservative static
+    approximation (see ``_js_access_regex``). It is off by default because even
+    an explicit read of a global does not establish that the global exists at
+    runtime — a feature check is indistinguishable from real use.
     """
     source = Path(path) if isinstance(path, str) else path
     try:
@@ -313,11 +349,25 @@ def load_fingerprints(
             pass
 
     def js_rule(tech: str, global_path: str, val_raw: object) -> Rule:
-        """A ``js`` entry: the key is a literal global path, the value only
-        carries version/confidence tags (never a pattern for the path)."""
+        """A ``js`` entry: the key is a global property path, compiled into an
+        access pattern; the value only carries version/confidence tags (never a
+        pattern for the path).
+
+        Two spellings occur in the real database and are normalized here: a
+        leading dot (``.__NEXT_DATA__.gsp``) and an explicitly written root
+        (``window.AudioEye.version``, which would otherwise compile into
+        ``window.window.…`` and never match).
+
+        No ``IGNORECASE``: property access in JavaScript is case-sensitive and
+        the fingerprint key *is* the identifier, so folding case would both
+        overmatch and silently break the pre-filter in ``_apply_rule``.
+        """
         path = str(global_path).strip()
-        if not path:
-            skip("js:malformed", 1, f"{tech}: empty js global path")
+        segments = [segment.strip() for segment in path.strip(".").split(".")]
+        if segments and segments[0] in JS_GLOBAL_OBJECTS:
+            segments = segments[1:]  # the root is implicit in every compiled pattern
+        if not segments or not all(segments):
+            skip("js:malformed", 1, f"{tech}: unusable js global path {path!r}")
             raise _SkipPattern
         _, confidence = _parse_pattern(str(val_raw))
         return Rule(
@@ -325,8 +375,9 @@ def load_fingerprints(
             channel="js",
             raw_pattern=f"js:{path}",
             confidence=confidence,
-            value_regex=re.compile(re.escape(path), re.IGNORECASE),
+            value_regex=_js_access_regex(segments),
             js_path=path,
+            js_needle=max(segments, key=len),
         )
 
     def header_cookie_rule(tech: str, key: str, name_raw: str, val_raw: object) -> Rule:

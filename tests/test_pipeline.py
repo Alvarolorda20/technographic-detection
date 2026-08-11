@@ -29,7 +29,12 @@ def handler(request: httpx.Request) -> httpx.Response:
             html='<html><link href="/wp-content/x.css">Forbidden</html>',
         )
     if host in ("jsapp.test", "www.jsapp.test"):
-        return httpx.Response(200, html="<html><script>window.Intercom.booted;</script></html>")
+        # The `try{}catch{}` is a decoy for the js channel: a substring matcher
+        # reports the `Catch` global here, an access matcher does not.
+        return httpx.Response(
+            200,
+            html="<html><script>try{go()}catch(e){}; window.Intercom.booted;</script></html>",
+        )
     if host == "moved.test":
         return httpx.Response(301, headers={"location": "https://app.moved.test/"})
     if host == "app.moved.test":
@@ -189,10 +194,12 @@ def test_cli_unwritable_evidence_is_fatal(tmp_path, offline_cli):
 
 
 def test_cli_js_channel_is_opt_in_end_to_end(tmp_path, offline_cli):
-    """Same page, same fingerprints: the js channel only fires when asked for."""
+    """Same page, same fingerprints: the js channel only fires when asked for,
+    and when it does it reports the real access and not the decoy."""
     fingerprints_file = tmp_path / "fp.json"
     fingerprints_file.write_text(
-        json.dumps({"Intercom": {"js": {"Intercom.booted": ""}}}), encoding="utf-8"
+        json.dumps({"Intercom": {"js": {"Intercom.booted": ""}}, "Decoy": {"js": {"Catch": ""}}}),
+        encoding="utf-8",
     )
     domains_file = tmp_path / "domains.txt"
     domains_file.write_text("jsapp.test\n", encoding="utf-8")

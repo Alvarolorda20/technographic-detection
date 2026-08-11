@@ -91,8 +91,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--enable-js-channel",
         action="store_true",
-        help="also match Wappalyzer 'js' (window.* globals) by searching inline scripts for the "
-        "global's name — a static approximation with a higher false-positive rate, off by default",
+        help="also match Wappalyzer 'js' (window.* globals) by requiring an explicit read of the "
+        "global in inline scripts — a static approximation, weaker evidence, off by default",
     )
     parser.add_argument(
         "--min-confidence",
