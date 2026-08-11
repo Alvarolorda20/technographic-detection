@@ -7,5 +7,6 @@ dist/
 venv/
 .pytest_cache/
 .ruff_cache/
+# Ad-hoc evidence runs; the committed sample is evidence.example.json.
 evidence.json
 technologies-full*.json

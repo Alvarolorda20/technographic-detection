@@ -18,8 +18,11 @@ from techdetect.fetcher import BODY_CAP_BYTES, FetchResult, fetch_homepage, make
 logger = logging.getLogger(__name__)
 
 DEFAULT_CONCURRENCY = 10
-DOMAIN_DEADLINE = 20.0  # hard cap on fetch time per domain (defuses trickling bodies)
+# Hard cap over the whole ladder, so it also defuses a body that trickles in.
+DOMAIN_DEADLINE = 20.0
+# Concurrent with the fetch, not additive; covers one query's lifetime x attempts.
 DNS_DEADLINE = 15.0
+# One extra CNAME lookup on the redirected host, so one query's retries is enough.
 EXTRA_CNAME_DEADLINE = 8.0
 
 

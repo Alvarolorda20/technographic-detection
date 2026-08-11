@@ -1,0 +1,454 @@
+{
+  "notion.so": [
+    {
+      "technology": "Cloudflare",
+      "channel": "headers",
+      "pattern": "cf-ray -> ",
+      "matched_signal": "cf-ray: a28f633ed8260360-MAD",
+      "confidence": 100
+    },
+    {
+      "technology": "Cloudflare",
+      "channel": "headers",
+      "pattern": "cf-cache-status -> ",
+      "matched_signal": "cf-cache-status: DYNAMIC",
+      "confidence": 100
+    }
+  ],
+  "stripe.com": [
+    {
+      "technology": "Stripe",
+      "channel": "headers",
+      "pattern": "X-Stripe-.* -> ",
+      "matched_signal": "x-stripe-proxy-response: upstream",
+      "confidence": 100
+    },
+    {
+      "technology": "Google Workspace",
+      "channel": "dns",
+      "pattern": "google\\.com",
+      "matched_signal": "MX alt2.aspmx.l.google.com.",
+      "confidence": 100
+    }
+  ],
+  "intercom.com": [
+    {
+      "technology": "HubSpot",
+      "channel": "dns",
+      "pattern": "hubspot-developer-verification",
+      "matched_signal": "TXT hubspot-developer-verification=zwu1zdmyntqtmdjlyi00zmrjltk0z…",
+      "confidence": 100
+    },
+    {
+      "technology": "Google Workspace",
+      "channel": "dns",
+      "pattern": "google\\.com",
+      "matched_signal": "MX alt1.aspmx.l.google.com.",
+      "confidence": 100
+    }
+  ],
+  "shopify.com": [
+    {
+      "technology": "Cloudflare",
+      "channel": "headers",
+      "pattern": "cf-ray -> ",
+      "matched_signal": "cf-ray: a28f633e8d17035f-MAD",
+      "confidence": 100
+    },
+    {
+      "technology": "Cloudflare",
+      "channel": "headers",
+      "pattern": "cf-cache-status -> ",
+      "matched_signal": "cf-cache-status: BYPASS",
+      "confidence": 100
+    },
+    {
+      "technology": "Shopify",
+      "channel": "html",
+      "pattern": "cdn\\.shopify\\.com",
+      "matched_signal": "…`${t.slice(0,f)}...`:t:\"\",N=[\"cdn.shopify.com\",\"shopify.com\"…",
+      "confidence": 100
+    },
+    {
+      "technology": "SendGrid",
+      "channel": "dns",
+      "pattern": "sendgrid\\.net",
+      "matched_signal": "TXT …lude:mail.zendesk.com include:sendgrid.net ~all",
+      "confidence": 100
+    },
+    {
+      "technology": "Google Workspace",
+      "channel": "dns",
+      "pattern": "google\\.com",
+      "matched_signal": "MX alt2.aspmx.l.google.com.",
+      "confidence": 100
+    }
+  ],
+  "hubspot.com": [
+    {
+      "technology": "HubSpot",
+      "channel": "dns",
+      "pattern": "hubspot-developer-verification",
+      "matched_signal": "TXT hubspot-developer-verification=mzvhytqwymutn2uyzs00mge4lwjln…",
+      "confidence": 100
+    },
+    {
+      "technology": "Cloudflare",
+      "channel": "headers",
+      "pattern": "cf-ray -> ",
+      "matched_signal": "cf-ray: a28f633e1e70ec8d-MAD",
+      "confidence": 100
+    },
+    {
+      "technology": "Cloudflare",
+      "channel": "headers",
+      "pattern": "cf-cache-status -> ",
+      "matched_signal": "cf-cache-status: DYNAMIC",
+      "confidence": 100
+    },
+    {
+      "technology": "Google Workspace",
+      "channel": "dns",
+      "pattern": "google\\.com",
+      "matched_signal": "MX smtp.google.com.",
+      "confidence": 100
+    }
+  ],
+  "linear.app": [
+    {
+      "technology": "Cloudflare",
+      "channel": "headers",
+      "pattern": "cf-ray -> ",
+      "matched_signal": "cf-ray: a28f633d9bcbf779-MAD",
+      "confidence": 100
+    },
+    {
+      "technology": "Cloudflare",
+      "channel": "headers",
+      "pattern": "cf-cache-status -> ",
+      "matched_signal": "cf-cache-status: DYNAMIC",
+      "confidence": 100
+    },
+    {
+      "technology": "Google Workspace",
+      "channel": "dns",
+      "pattern": "google\\.com",
+      "matched_signal": "MX alt2.aspmx.l.google.com.",
+      "confidence": 100
+    }
+  ],
+  "vercel.com": [
+    {
+      "technology": "SendGrid",
+      "channel": "dns",
+      "pattern": "sendgrid\\.net",
+      "matched_signal": "TXT …include:amazonses.com include:sendgrid.net include:_spf.sale…",
+      "confidence": 100
+    },
+    {
+      "technology": "Google Workspace",
+      "channel": "dns",
+      "pattern": "google\\.com",
+      "matched_signal": "MX alt2.aspmx.l.google.com.",
+      "confidence": 100
+    }
+  ],
+  "figma.com": [
+    {
+      "technology": "Google Workspace",
+      "channel": "dns",
+      "pattern": "google\\.com",
+      "matched_signal": "MX aspmx.l.google.com.",
+      "confidence": 100
+    }
+  ],
+  "webflow.com": [
+    {
+      "technology": "HubSpot",
+      "channel": "dns",
+      "pattern": "hubspot-developer-verification",
+      "matched_signal": "TXT hubspot-developer-verification=nwrmzjrhnmytnzazni00mdzkltgyo…",
+      "confidence": 100
+    },
+    {
+      "technology": "Cloudflare",
+      "channel": "headers",
+      "pattern": "cf-ray -> ",
+      "matched_signal": "cf-ray: a28f633f0eff5707-IAD",
+      "confidence": 100
+    },
+    {
+      "technology": "Cloudflare",
+      "channel": "headers",
+      "pattern": "cf-cache-status -> ",
+      "matched_signal": "cf-cache-status: HIT",
+      "confidence": 100
+    },
+    {
+      "technology": "Google Workspace",
+      "channel": "dns",
+      "pattern": "google\\.com",
+      "matched_signal": "MX alt1.aspmx.l.google.com.",
+      "confidence": 100
+    }
+  ],
+  "loom.com": [],
+  "pipedrive.com": [
+    {
+      "technology": "Cloudflare",
+      "channel": "headers",
+      "pattern": "cf-ray -> ",
+      "matched_signal": "cf-ray: a28f633fe8fc0335-MAD",
+      "confidence": 100
+    },
+    {
+      "technology": "Cloudflare",
+      "channel": "headers",
+      "pattern": "cf-cache-status -> ",
+      "matched_signal": "cf-cache-status: DYNAMIC",
+      "confidence": 100
+    },
+    {
+      "technology": "Google Workspace",
+      "channel": "dns",
+      "pattern": "google\\.com",
+      "matched_signal": "MX aspmx.l.google.com.",
+      "confidence": 100
+    }
+  ],
+  "typeform.com": [
+    {
+      "technology": "HubSpot",
+      "channel": "dns",
+      "pattern": "hubspot-developer-verification",
+      "matched_signal": "TXT hubspot-developer-verification=mmvmngmxyjytn2mxny00yzmylwjlo…",
+      "confidence": 100
+    },
+    {
+      "technology": "Google Analytics 4",
+      "channel": "script",
+      "pattern": "gtag\\(",
+      "matched_signal": "inline: …ataLayer || []; function gtag() { dataLayer.pus…",
+      "confidence": 100
+    },
+    {
+      "technology": "Cloudflare",
+      "channel": "headers",
+      "pattern": "cf-ray -> ",
+      "matched_signal": "cf-ray: a28f6341dae12dd2-MAD",
+      "confidence": 100
+    },
+    {
+      "technology": "Cloudflare",
+      "channel": "headers",
+      "pattern": "cf-cache-status -> ",
+      "matched_signal": "cf-cache-status: HIT",
+      "confidence": 100
+    },
+    {
+      "technology": "SendGrid",
+      "channel": "dns",
+      "pattern": "sendgrid\\.net",
+      "matched_signal": "TXT …m include:mailgun.org include:sendgrid.net ip4:136.143.188.0…",
+      "confidence": 100
+    },
+    {
+      "technology": "Google Workspace",
+      "channel": "dns",
+      "pattern": "google\\.com",
+      "matched_signal": "MX alt1.aspmx.l.google.com.",
+      "confidence": 100
+    }
+  ],
+  "calendly.com": [
+    {
+      "technology": "HubSpot",
+      "channel": "dns",
+      "pattern": "hubspot-developer-verification",
+      "matched_signal": "TXT hubspot-developer-verification=mdzjm2q5y2qtyjixos00ztlllwizy…",
+      "confidence": 100
+    },
+    {
+      "technology": "Cloudflare",
+      "channel": "headers",
+      "pattern": "cf-ray -> ",
+      "matched_signal": "cf-ray: a28f633fd8c2eca6-MAD",
+      "confidence": 100
+    },
+    {
+      "technology": "Cloudflare",
+      "channel": "headers",
+      "pattern": "cf-cache-status -> ",
+      "matched_signal": "cf-cache-status: DYNAMIC",
+      "confidence": 100
+    },
+    {
+      "technology": "Google Workspace",
+      "channel": "dns",
+      "pattern": "google\\.com",
+      "matched_signal": "MX alt2.aspmx.l.google.com.",
+      "confidence": 100
+    }
+  ],
+  "segment.com": [
+    {
+      "technology": "HubSpot",
+      "channel": "dns",
+      "pattern": "hubspot-developer-verification",
+      "matched_signal": "TXT hubspot-developer-verification=mgm0mwqwntytm2myos00ytm5ltk5n…",
+      "confidence": 100
+    },
+    {
+      "technology": "Google Analytics 4",
+      "channel": "script",
+      "pattern": "gtag\\(",
+      "matched_signal": "inline: …ion (resolve) { gtag(\"get\", CONTAINER_ID, prop…",
+      "confidence": 100
+    },
+    {
+      "technology": "Google Workspace",
+      "channel": "dns",
+      "pattern": "google\\.com",
+      "matched_signal": "MX smtp.google.com.",
+      "confidence": 100
+    },
+    {
+      "technology": "Segment",
+      "channel": "script",
+      "pattern": "cdn\\.segment\\.com/analytics\\.js",
+      "matched_signal": "inline: …cs-key\", i); t.src = \"https://cdn.segment.com/analytics.js/v…",
+      "confidence": 100
+    }
+  ],
+  "hotjar.com": [
+    {
+      "technology": "HubSpot",
+      "channel": "dns",
+      "pattern": "hubspot-developer-verification",
+      "matched_signal": "TXT hubspot-developer-verification=mji0ztvimwutzmmxni00njbjlwfmm…",
+      "confidence": 100
+    },
+    {
+      "technology": "Google Workspace",
+      "channel": "dns",
+      "pattern": "google\\.com",
+      "matched_signal": "MX alt2.aspmx.l.google.com.",
+      "confidence": 100
+    }
+  ],
+  "drift.com": [
+    {
+      "technology": "Cloudflare",
+      "channel": "headers",
+      "pattern": "cf-ray -> ",
+      "matched_signal": "cf-ray: a28f634b8cd9cbcf-MAD",
+      "confidence": 100
+    },
+    {
+      "technology": "Cloudflare",
+      "channel": "headers",
+      "pattern": "cf-cache-status -> ",
+      "matched_signal": "cf-cache-status: REVALIDATED",
+      "confidence": 100
+    },
+    {
+      "technology": "SendGrid",
+      "channel": "dns",
+      "pattern": "sendgrid\\.net",
+      "matched_signal": "TXT …clude:_spf.google.com include:sendgrid.net include:amazonses…",
+      "confidence": 100
+    },
+    {
+      "technology": "Google Workspace",
+      "channel": "dns",
+      "pattern": "google\\.com",
+      "matched_signal": "MX alt1.aspmx.l.google.com.",
+      "confidence": 100
+    }
+  ],
+  "zendesk.com": [
+    {
+      "technology": "HubSpot",
+      "channel": "dns",
+      "pattern": "hubspot-developer-verification",
+      "matched_signal": "TXT hubspot-developer-verification=ymrjztlhztitzmrhny00zjzhlwfhz…",
+      "confidence": 100
+    },
+    {
+      "technology": "Cloudflare",
+      "channel": "headers",
+      "pattern": "cf-ray -> ",
+      "matched_signal": "cf-ray: a28f634479c9013e-MAD",
+      "confidence": 100
+    },
+    {
+      "technology": "Cloudflare",
+      "channel": "headers",
+      "pattern": "cf-cache-status -> ",
+      "matched_signal": "cf-cache-status: HIT",
+      "confidence": 100
+    },
+    {
+      "technology": "Google Workspace",
+      "channel": "dns",
+      "pattern": "google\\.com",
+      "matched_signal": "MX aspmx.l.google.com.",
+      "confidence": 100
+    },
+    {
+      "technology": "Zendesk",
+      "channel": "script",
+      "pattern": "static\\.zdassets\\.com",
+      "matched_signal": "inline: …ttp://') + (tt ? 'static.zdassets.com' : 'static…",
+      "confidence": 100
+    }
+  ],
+  "mailchimp.com": [
+    {
+      "technology": "Google Analytics 4",
+      "channel": "script",
+      "pattern": "gtag\\(",
+      "matched_signal": "inline: …dataLayer || []; function gtag(){dataLayer.push(argument…",
+      "confidence": 100
+    }
+  ],
+  "sendgrid.com": [
+    {
+      "technology": "Google Analytics 4",
+      "channel": "script",
+      "pattern": "gtag\\(",
+      "matched_signal": "inline: …ion (resolve) { gtag(\"get\", CONTAINER_ID, prop…",
+      "confidence": 100
+    },
+    {
+      "technology": "Google Workspace",
+      "channel": "dns",
+      "pattern": "google\\.com",
+      "matched_signal": "MX smtp.google.com.",
+      "confidence": 100
+    },
+    {
+      "technology": "Segment",
+      "channel": "script",
+      "pattern": "cdn\\.segment\\.com/analytics\\.js",
+      "matched_signal": "inline: …cs-key\", i); t.src = \"https://cdn.segment.com/analytics.js/v…",
+      "confidence": 100
+    }
+  ],
+  "sentry.io": [
+    {
+      "technology": "SendGrid",
+      "channel": "dns",
+      "pattern": "sendgrid\\.net",
+      "matched_signal": "TXT …lude:mail.zendesk.com include:sendgrid.net include:mktomail.…",
+      "confidence": 100
+    },
+    {
+      "technology": "Google Workspace",
+      "channel": "dns",
+      "pattern": "google\\.com",
+      "matched_signal": "MX alt1.aspmx.l.google.com.",
+      "confidence": 100
+    }
+  ]
+}

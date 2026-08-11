@@ -30,6 +30,7 @@ import dns.resolver
 logger = logging.getLogger(__name__)
 
 RECORD_TYPES = ("MX", "TXT", "CNAME")
+# Per query, and a second attempt clears the lost UDP packet this retries.
 DEFAULT_LIFETIME = 5.0
 DEFAULT_ATTEMPTS = 2
 DEFAULT_MAX_CONCURRENT = 12

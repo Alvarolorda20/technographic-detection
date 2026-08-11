@@ -21,7 +21,9 @@ logger = logging.getLogger(__name__)
 # headroom over real homepages: the largest of the assignment's test domains
 # serves ~1.5 MB, and a cap it can reach would silently drop page signals.
 BODY_CAP_BYTES = 4_000_000
+# Per request, not per domain; the caller's per-domain deadline bounds the ladder.
 DEFAULT_TIMEOUT = 8.0
+# Fails faster: connecting is what hangs when a candidate host does not exist.
 CONNECT_TIMEOUT = 5.0
 # Challenge markers are only searched in this prefix of a 2xx body: real
 # challenge pages are tiny, and a long legitimate page that merely mentions a
